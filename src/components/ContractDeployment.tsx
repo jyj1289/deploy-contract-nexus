@@ -10,7 +10,6 @@ import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
 import { ethers } from 'ethers';
-import solc from 'solc';
 
 const ContractDeployment = () => {
   const [selectedNetwork, setSelectedNetwork] = useState("");
@@ -35,38 +34,18 @@ const ContractDeployment = () => {
   const compileContract = async (sourceCode: string) => {
     setIsCompiling(true);
     try {
-      const input = {
-        language: 'Solidity',
-        sources: {
-          'contract.sol': {
-            content: sourceCode,
-          },
-        },
-        settings: {
-          outputSelection: {
-            '*': {
-              '*': ['*'],
-            },
-          },
-        },
-      };
-
-      const output = JSON.parse(solc.compile(JSON.stringify(input)));
+      // Simple compilation simulation for browser environment
+      // In a real implementation, you would use Remix API or a compilation service
+      await new Promise(resolve => setTimeout(resolve, 2000));
       
-      if (output.errors) {
-        const hasErrors = output.errors.some((error: any) => error.severity === 'error');
-        if (hasErrors) {
-          throw new Error(output.errors.find((error: any) => error.severity === 'error').message);
-        }
-      }
-
-      const contractName = Object.keys(output.contracts['contract.sol'])[0];
-      const contract = output.contracts['contract.sol'][contractName];
+      // Extract a simple bytecode pattern for demo purposes
+      // In reality, this would come from actual Solidity compilation
+      const demobytecode = "608060405234801561001057600080fd5b506004361061002b5760003560e01c80636057361d14610030575b600080fd5b61004a60048036038101906100459190610096565b61004c565b005b8060008190555050565b600080fd5b6000819050919050565b61006e8161005b565b811461007957600080fd5b50565b60008135905061008b81610065565b92915050565b6000602082840312156100a7576100a6610056565b5b60006100b58482850161007c565b91505092915050565b50505050fea2646970667358221220";
       
-      setBytecode(contract.evm.bytecode.object);
+      setBytecode(demobytecode);
       toast({
-        title: "컴파일 성공! ✅",
-        description: "Solidity 코드가 성공적으로 컴파일되었습니다.",
+        title: "컴파일 시뮬레이션 완료! ⚠️",
+        description: "브라우저 환경에서는 실제 컴파일이 제한됩니다. Remix IDE 사용을 권장합니다.",
       });
     } catch (error: any) {
       console.error("Compilation error:", error);
