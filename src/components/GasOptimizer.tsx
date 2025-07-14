@@ -160,11 +160,11 @@ const GasOptimizer = () => {
                               <Badge variant="secondary" className="text-xs">추천</Badge>
                             )}
                           </div>
-                          <p className="text-sm text-muted-foreground">{data.time}</p>
+                           <p className="text-sm text-muted-foreground">{(data as any).time}</p>
                         </div>
                         <div className="text-right">
-                          <p className="font-mono text-web3-primary">{data.price} Gwei</p>
-                          <p className="text-sm text-muted-foreground">~{data.cost} ETH</p>
+                          <p className="font-mono text-web3-primary">{(data as any).price} Gwei</p>
+                          <p className="text-sm text-muted-foreground">~{(data as any).cost} ETH</p>
                         </div>
                       </div>
                     </div>

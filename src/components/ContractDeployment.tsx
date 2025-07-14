@@ -34,7 +34,7 @@ const ContractDeployment = () => {
       const reader = new FileReader();
       reader.onload = (e) => {
         try {
-          const content = e.target.result;
+          const content = e.target?.result as string;
           // Assume it's a JSON file with bytecode
           const parsed = JSON.parse(content);
           setBytecode(parsed.bytecode || parsed.data || content);
@@ -43,6 +43,7 @@ const ContractDeployment = () => {
             description: `${file.name} 파일이 성공적으로 업로드되었습니다.`,
           });
         } catch (error) {
+          const content = e.target?.result as string;
           setBytecode(content);
           toast({
             title: "파일 업로드 완료",
