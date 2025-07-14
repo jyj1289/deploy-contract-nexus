@@ -56,6 +56,8 @@ const ContractDeployment = () => {
   };
 
   const handleDeploy = async () => {
+    console.log("배포 시작 - 네트워크:", selectedNetwork, "바이트코드 길이:", bytecode?.length);
+    
     if (!selectedNetwork || !bytecode) {
       toast({
         title: "입력 오류",
@@ -69,6 +71,7 @@ const ContractDeployment = () => {
     
     // Simulate deployment process
     try {
+      console.log("Mock 배포 프로세스 시작");
       await new Promise(resolve => setTimeout(resolve, 3000));
       
       const mockResult = {
@@ -80,15 +83,17 @@ const ContractDeployment = () => {
         status: "success"
       };
       
+      console.log("Mock 배포 결과:", mockResult);
       setDeploymentResult(mockResult);
       toast({
         title: "배포 성공! 🎉",
         description: "스마트 컨트랙트가 성공적으로 배포되었습니다.",
       });
     } catch (error) {
+      console.error("배포 에러:", error);
       toast({
         title: "배포 실패",
-        description: "배포 중 오류가 발생했습니다. 다시 시도해주세요.",
+        description: `배포 중 오류가 발생했습니다: ${error}`,
         variant: "destructive",
       });
     } finally {
