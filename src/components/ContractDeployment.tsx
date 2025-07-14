@@ -9,106 +9,46 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
-import { ethers } from 'ethers';
-import solc from 'solc';
 
 const ContractDeployment = () => {
   const [selectedNetwork, setSelectedNetwork] = useState("");
   const [bytecode, setBytecode] = useState("");
-  const [contractSource, setContractSource] = useState("");
   const [constructorArgs, setConstructorArgs] = useState("");
-  const [privateKey, setPrivateKey] = useState("");
-  const [deploymentResult, setDeploymentResult] = useState<any>(null);
+  const [deploymentResult, setDeploymentResult] = useState(null);
   const [isDeploying, setIsDeploying] = useState(false);
-  const [isCompiling, setIsCompiling] = useState(false);
-  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
+  const [uploadedFile, setUploadedFile] = useState(null);
   const { toast } = useToast();
 
   const networks = [
-    { id: "ganache", name: "Ganache Local", chainId: 1337, color: "bg-orange-500", rpcUrl: "http://127.0.0.1:7545", explorer: null },
-    { id: "hardhat", name: "Hardhat Local", chainId: 31337, color: "bg-yellow-500", rpcUrl: "http://127.0.0.1:8545", explorer: null },
-    { id: "ethereum", name: "Ethereum Mainnet", chainId: 1, color: "bg-blue-500", rpcUrl: "https://mainnet.infura.io", explorer: "https://etherscan.io" },
-    { id: "goerli", name: "Goerli Testnet", chainId: 5, color: "bg-yellow-500", rpcUrl: "https://goerli.infura.io", explorer: "https://goerli.etherscan.io" },
-    { id: "polygon", name: "Polygon", chainId: 137, color: "bg-purple-500", rpcUrl: "https://polygon-rpc.com", explorer: "https://polygonscan.com" },
+    { id: "ethereum", name: "Ethereum Mainnet", chainId: 1, color: "bg-blue-500" },
+    { id: "goerli", name: "Goerli Testnet", chainId: 5, color: "bg-yellow-500" },
+    { id: "polygon", name: "Polygon", chainId: 137, color: "bg-purple-500" },
+    { id: "bsc", name: "BSC", chainId: 56, color: "bg-yellow-600" },
+    { id: "arbitrum", name: "Arbitrum", chainId: 42161, color: "bg-blue-600" },
   ];
 
-  const compileContract = async (sourceCode: string) => {
-    setIsCompiling(true);
-    try {
-      const input = {
-        language: 'Solidity',
-        sources: {
-          'contract.sol': {
-            content: sourceCode,
-          },
-        },
-        settings: {
-          outputSelection: {
-            '*': {
-              '*': ['*'],
-            },
-          },
-        },
-      };
-
-      const output = JSON.parse(solc.compile(JSON.stringify(input)));
-      
-      if (output.errors) {
-        const hasErrors = output.errors.some((error: any) => error.severity === 'error');
-        if (hasErrors) {
-          throw new Error(output.errors.find((error: any) => error.severity === 'error').message);
-        }
-      }
-
-      const contractName = Object.keys(output.contracts['contract.sol'])[0];
-      const contract = output.contracts['contract.sol'][contractName];
-      
-      setBytecode(contract.evm.bytecode.object);
-      toast({
-        title: "컴파일 성공! ✅",
-        description: "Solidity 코드가 성공적으로 컴파일되었습니다.",
-      });
-    } catch (error: any) {
-      console.error("Compilation error:", error);
-      toast({
-        title: "컴파일 실패",
-        description: error.message || "컴파일 중 오류가 발생했습니다.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsCompiling(false);
-    }
-  };
-
-  const handleFileUpload = (event: any) => {
+  const handleFileUpload = (event) => {
     const file = event.target.files[0];
     if (file) {
       setUploadedFile(file);
       const reader = new FileReader();
       reader.onload = (e) => {
-        const content = e.target?.result as string;
-        
-        if (file.name.endsWith('.sol')) {
-          setContractSource(content);
+        try {
+          const content = e.target?.result as string;
+          // Assume it's a JSON file with bytecode
+          const parsed = JSON.parse(content);
+          setBytecode(parsed.bytecode || parsed.data || content);
           toast({
-            title: "Solidity 파일 업로드",
-            description: `${file.name} 파일이 업로드되었습니다. 컴파일 버튼을 눌러주세요.`,
+            title: "파일 업로드 성공",
+            description: `${file.name} 파일이 성공적으로 업로드되었습니다.`,
           });
-        } else {
-          try {
-            const parsed = JSON.parse(content);
-            setBytecode(parsed.bytecode || parsed.data || content);
-            toast({
-              title: "파일 업로드 성공",
-              description: `${file.name} 파일에서 바이트코드를 추출했습니다.`,
-            });
-          } catch (error) {
-            setBytecode(content);
-            toast({
-              title: "파일 업로드 완료",
-              description: "바이트코드가 입력되었습니다.",
-            });
-          }
+        } catch (error) {
+          const content = e.target?.result as string;
+          setBytecode(content);
+          toast({
+            title: "파일 업로드 완료",
+            description: "바이트코드가 입력되었습니다.",
+          });
         }
       };
       reader.readAsText(file);
@@ -116,10 +56,10 @@ const ContractDeployment = () => {
   };
 
   const handleDeploy = async () => {
-    if (!selectedNetwork || !bytecode || !privateKey) {
+    if (!selectedNetwork || !bytecode) {
       toast({
         title: "입력 오류",
-        description: "네트워크, 바이트코드, 개인키를 모두 입력해주세요.",
+        description: "네트워크와 바이트코드를 모두 입력해주세요.",
         variant: "destructive",
       });
       return;
@@ -127,96 +67,32 @@ const ContractDeployment = () => {
 
     setIsDeploying(true);
     
+    // Simulate deployment process
     try {
-      const selectedNet = networks.find(n => n.id === selectedNetwork);
-      if (!selectedNet) {
-        throw new Error("네트워크를 찾을 수 없습니다.");
-      }
-
-      // Connect to the network
-      const provider = new ethers.JsonRpcProvider(selectedNet.rpcUrl);
-      const wallet = new ethers.Wallet(privateKey, provider);
-
-      // Clean bytecode
-      const cleanBytecode = bytecode.startsWith('0x') ? bytecode : `0x${bytecode}`;
-
-      // Parse constructor arguments if provided
-      let constructorData = cleanBytecode;
-      if (constructorArgs.trim()) {
-        const args = constructorArgs.split(',').map(arg => arg.trim());
-        const abiCoder = new ethers.AbiCoder();
-        const encodedArgs = abiCoder.encode(['string[]'], [args]);
-        constructorData = cleanBytecode + encodedArgs.slice(2);
-      }
-
-      // Create deployment transaction
-      const tx = {
-        data: constructorData,
-        gasLimit: 3000000, // 3M gas limit
+      await new Promise(resolve => setTimeout(resolve, 3000));
+      
+      const mockResult = {
+        contractAddress: "0x742d35Cc6634C0532925a3b8D291803456789ABC",
+        transactionHash: "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+        blockNumber: 18245893,
+        gasUsed: "2,134,567",
+        deploymentCost: "0.0234",
+        status: "success"
       };
-
-      // Send transaction
-      const deployTx = await wallet.sendTransaction(tx);
-      const receipt = await deployTx.wait();
-
-      if (receipt && receipt.status === 1) {
-        const result = {
-          contractAddress: receipt.contractAddress,
-          transactionHash: receipt.hash,
-          blockNumber: receipt.blockNumber,
-          gasUsed: receipt.gasUsed.toString(),
-          deploymentCost: ethers.formatEther(deployTx.gasPrice! * receipt.gasUsed),
-          status: "success"
-        };
-        
-        setDeploymentResult(result);
-        toast({
-          title: "배포 성공! 🎉",
-          description: "스마트 컨트랙트가 성공적으로 배포되었습니다.",
-        });
-      } else {
-        throw new Error("배포 트랜잭션이 실패했습니다.");
-      }
-    } catch (error: any) {
-      console.error("Deployment error:", error);
+      
+      setDeploymentResult(mockResult);
+      toast({
+        title: "배포 성공! 🎉",
+        description: "스마트 컨트랙트가 성공적으로 배포되었습니다.",
+      });
+    } catch (error) {
       toast({
         title: "배포 실패",
-        description: error.message || "배포 중 오류가 발생했습니다.",
+        description: "배포 중 오류가 발생했습니다. 다시 시도해주세요.",
         variant: "destructive",
       });
     } finally {
       setIsDeploying(false);
-    }
-  };
-
-  const getExplorerUrl = (network: any, address: string, type: 'address' | 'tx' = 'address') => {
-    if (!network.explorer) return null;
-    return `${network.explorer}/${type}/${address}`;
-  };
-
-  const handleViewOnExplorer = () => {
-    const network = networks.find(n => n.id === selectedNetwork);
-    if (network && deploymentResult?.contractAddress) {
-      const url = getExplorerUrl(network, deploymentResult.contractAddress, 'address');
-      if (url) {
-        window.open(url, '_blank');
-      } else {
-        toast({
-          title: "익스플로러 지원 안함",
-          description: "로컬 네트워크는 블록 익스플로러를 지원하지 않습니다.",
-          variant: "destructive",
-        });
-      }
-    }
-  };
-
-  const handleCopyAddress = () => {
-    if (deploymentResult?.contractAddress) {
-      navigator.clipboard.writeText(deploymentResult.contractAddress);
-      toast({
-        title: "주소 복사됨",
-        description: "컨트랙트 주소가 클립보드에 복사되었습니다.",
-      });
     }
   };
 
@@ -277,34 +153,6 @@ const ContractDeployment = () => {
               </div>
             </div>
 
-            {/* Contract Source Input */}
-            {contractSource && (
-              <div className="space-y-2">
-                <Label htmlFor="contract-source">Solidity 소스 코드</Label>
-                <Textarea
-                  id="contract-source"
-                  value={contractSource}
-                  onChange={(e) => setContractSource(e.target.value)}
-                  className="web3-input min-h-[120px] font-mono text-sm"
-                  placeholder="pragma solidity ^0.8.0;..."
-                />
-                <Button 
-                  onClick={() => compileContract(contractSource)}
-                  disabled={isCompiling || !contractSource}
-                  className="web3-button"
-                >
-                  {isCompiling ? (
-                    <div className="flex items-center space-x-2">
-                      <div className="loading-spinner w-4 h-4" />
-                      <span>컴파일 중...</span>
-                    </div>
-                  ) : (
-                    "Solidity 컴파일"
-                  )}
-                </Button>
-              </div>
-            )}
-
             {/* Bytecode Input */}
             <div className="space-y-2">
               <Label htmlFor="bytecode">바이트코드</Label>
@@ -314,19 +162,6 @@ const ContractDeployment = () => {
                 value={bytecode}
                 onChange={(e) => setBytecode(e.target.value)}
                 className="web3-input min-h-[120px] font-mono text-sm"
-              />
-            </div>
-
-            {/* Private Key Input */}
-            <div className="space-y-2">
-              <Label htmlFor="private-key">개인키 (Private Key)</Label>
-              <Input
-                id="private-key"
-                type="password"
-                placeholder="0x로 시작하는 개인키를 입력하세요"
-                value={privateKey}
-                onChange={(e) => setPrivateKey(e.target.value)}
-                className="web3-input"
               />
             </div>
 
@@ -426,19 +261,10 @@ const ContractDeployment = () => {
                 </div>
                 
                 <div className="flex space-x-2">
-                  <Button 
-                    variant="outline" 
-                    className="flex-1"
-                    onClick={handleViewOnExplorer}
-                    disabled={!networks.find(n => n.id === selectedNetwork)?.explorer}
-                  >
-                    View on Explorer
+                  <Button variant="outline" className="flex-1">
+                    View on Etherscan
                   </Button>
-                  <Button 
-                    variant="outline" 
-                    className="flex-1"
-                    onClick={handleCopyAddress}
-                  >
+                  <Button variant="outline" className="flex-1">
                     Copy Address
                   </Button>
                 </div>
