@@ -10,47 +10,105 @@ import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
 import { ethers } from 'ethers';
+import solc from 'solc';
 
 const ContractDeployment = () => {
   const [selectedNetwork, setSelectedNetwork] = useState("");
   const [bytecode, setBytecode] = useState("");
+  const [contractSource, setContractSource] = useState("");
   const [constructorArgs, setConstructorArgs] = useState("");
   const [privateKey, setPrivateKey] = useState("");
   const [deploymentResult, setDeploymentResult] = useState<any>(null);
   const [isDeploying, setIsDeploying] = useState(false);
+  const [isCompiling, setIsCompiling] = useState(false);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const { toast } = useToast();
 
   const networks = [
-    { id: "ganache", name: "Ganache Local", chainId: 1337, color: "bg-orange-500", rpcUrl: "http://127.0.0.1:7545" },
-    { id: "hardhat", name: "Hardhat Local", chainId: 31337, color: "bg-yellow-500", rpcUrl: "http://127.0.0.1:8545" },
-    { id: "ethereum", name: "Ethereum Mainnet", chainId: 1, color: "bg-blue-500", rpcUrl: "https://mainnet.infura.io" },
-    { id: "goerli", name: "Goerli Testnet", chainId: 5, color: "bg-yellow-500", rpcUrl: "https://goerli.infura.io" },
-    { id: "polygon", name: "Polygon", chainId: 137, color: "bg-purple-500", rpcUrl: "https://polygon-rpc.com" },
+    { id: "ganache", name: "Ganache Local", chainId: 1337, color: "bg-orange-500", rpcUrl: "http://127.0.0.1:7545", explorer: null },
+    { id: "hardhat", name: "Hardhat Local", chainId: 31337, color: "bg-yellow-500", rpcUrl: "http://127.0.0.1:8545", explorer: null },
+    { id: "ethereum", name: "Ethereum Mainnet", chainId: 1, color: "bg-blue-500", rpcUrl: "https://mainnet.infura.io", explorer: "https://etherscan.io" },
+    { id: "goerli", name: "Goerli Testnet", chainId: 5, color: "bg-yellow-500", rpcUrl: "https://goerli.infura.io", explorer: "https://goerli.etherscan.io" },
+    { id: "polygon", name: "Polygon", chainId: 137, color: "bg-purple-500", rpcUrl: "https://polygon-rpc.com", explorer: "https://polygonscan.com" },
   ];
 
-  const handleFileUpload = (event) => {
+  const compileContract = async (sourceCode: string) => {
+    setIsCompiling(true);
+    try {
+      const input = {
+        language: 'Solidity',
+        sources: {
+          'contract.sol': {
+            content: sourceCode,
+          },
+        },
+        settings: {
+          outputSelection: {
+            '*': {
+              '*': ['*'],
+            },
+          },
+        },
+      };
+
+      const output = JSON.parse(solc.compile(JSON.stringify(input)));
+      
+      if (output.errors) {
+        const hasErrors = output.errors.some((error: any) => error.severity === 'error');
+        if (hasErrors) {
+          throw new Error(output.errors.find((error: any) => error.severity === 'error').message);
+        }
+      }
+
+      const contractName = Object.keys(output.contracts['contract.sol'])[0];
+      const contract = output.contracts['contract.sol'][contractName];
+      
+      setBytecode(contract.evm.bytecode.object);
+      toast({
+        title: "컴파일 성공! ✅",
+        description: "Solidity 코드가 성공적으로 컴파일되었습니다.",
+      });
+    } catch (error: any) {
+      console.error("Compilation error:", error);
+      toast({
+        title: "컴파일 실패",
+        description: error.message || "컴파일 중 오류가 발생했습니다.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsCompiling(false);
+    }
+  };
+
+  const handleFileUpload = (event: any) => {
     const file = event.target.files[0];
     if (file) {
       setUploadedFile(file);
       const reader = new FileReader();
       reader.onload = (e) => {
-        try {
-          const content = e.target?.result as string;
-          // Assume it's a JSON file with bytecode
-          const parsed = JSON.parse(content);
-          setBytecode(parsed.bytecode || parsed.data || content);
+        const content = e.target?.result as string;
+        
+        if (file.name.endsWith('.sol')) {
+          setContractSource(content);
           toast({
-            title: "파일 업로드 성공",
-            description: `${file.name} 파일이 성공적으로 업로드되었습니다.`,
+            title: "Solidity 파일 업로드",
+            description: `${file.name} 파일이 업로드되었습니다. 컴파일 버튼을 눌러주세요.`,
           });
-        } catch (error) {
-          const content = e.target?.result as string;
-          setBytecode(content);
-          toast({
-            title: "파일 업로드 완료",
-            description: "바이트코드가 입력되었습니다.",
-          });
+        } else {
+          try {
+            const parsed = JSON.parse(content);
+            setBytecode(parsed.bytecode || parsed.data || content);
+            toast({
+              title: "파일 업로드 성공",
+              description: `${file.name} 파일에서 바이트코드를 추출했습니다.`,
+            });
+          } catch (error) {
+            setBytecode(content);
+            toast({
+              title: "파일 업로드 완료",
+              description: "바이트코드가 입력되었습니다.",
+            });
+          }
         }
       };
       reader.readAsText(file);
@@ -131,6 +189,37 @@ const ContractDeployment = () => {
     }
   };
 
+  const getExplorerUrl = (network: any, address: string, type: 'address' | 'tx' = 'address') => {
+    if (!network.explorer) return null;
+    return `${network.explorer}/${type}/${address}`;
+  };
+
+  const handleViewOnExplorer = () => {
+    const network = networks.find(n => n.id === selectedNetwork);
+    if (network && deploymentResult?.contractAddress) {
+      const url = getExplorerUrl(network, deploymentResult.contractAddress, 'address');
+      if (url) {
+        window.open(url, '_blank');
+      } else {
+        toast({
+          title: "익스플로러 지원 안함",
+          description: "로컬 네트워크는 블록 익스플로러를 지원하지 않습니다.",
+          variant: "destructive",
+        });
+      }
+    }
+  };
+
+  const handleCopyAddress = () => {
+    if (deploymentResult?.contractAddress) {
+      navigator.clipboard.writeText(deploymentResult.contractAddress);
+      toast({
+        title: "주소 복사됨",
+        description: "컨트랙트 주소가 클립보드에 복사되었습니다.",
+      });
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -187,6 +276,34 @@ const ContractDeployment = () => {
                 )}
               </div>
             </div>
+
+            {/* Contract Source Input */}
+            {contractSource && (
+              <div className="space-y-2">
+                <Label htmlFor="contract-source">Solidity 소스 코드</Label>
+                <Textarea
+                  id="contract-source"
+                  value={contractSource}
+                  onChange={(e) => setContractSource(e.target.value)}
+                  className="web3-input min-h-[120px] font-mono text-sm"
+                  placeholder="pragma solidity ^0.8.0;..."
+                />
+                <Button 
+                  onClick={() => compileContract(contractSource)}
+                  disabled={isCompiling || !contractSource}
+                  className="web3-button"
+                >
+                  {isCompiling ? (
+                    <div className="flex items-center space-x-2">
+                      <div className="loading-spinner w-4 h-4" />
+                      <span>컴파일 중...</span>
+                    </div>
+                  ) : (
+                    "Solidity 컴파일"
+                  )}
+                </Button>
+              </div>
+            )}
 
             {/* Bytecode Input */}
             <div className="space-y-2">
@@ -309,10 +426,19 @@ const ContractDeployment = () => {
                 </div>
                 
                 <div className="flex space-x-2">
-                  <Button variant="outline" className="flex-1">
-                    View on Etherscan
+                  <Button 
+                    variant="outline" 
+                    className="flex-1"
+                    onClick={handleViewOnExplorer}
+                    disabled={!networks.find(n => n.id === selectedNetwork)?.explorer}
+                  >
+                    View on Explorer
                   </Button>
-                  <Button variant="outline" className="flex-1">
+                  <Button 
+                    variant="outline" 
+                    className="flex-1"
+                    onClick={handleCopyAddress}
+                  >
                     Copy Address
                   </Button>
                 </div>
