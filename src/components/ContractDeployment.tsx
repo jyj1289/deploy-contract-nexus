@@ -9,22 +9,24 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
+import { ethers } from 'ethers';
 
 const ContractDeployment = () => {
   const [selectedNetwork, setSelectedNetwork] = useState("");
   const [bytecode, setBytecode] = useState("");
   const [constructorArgs, setConstructorArgs] = useState("");
-  const [deploymentResult, setDeploymentResult] = useState(null);
+  const [privateKey, setPrivateKey] = useState("");
+  const [deploymentResult, setDeploymentResult] = useState<any>(null);
   const [isDeploying, setIsDeploying] = useState(false);
-  const [uploadedFile, setUploadedFile] = useState(null);
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const { toast } = useToast();
 
   const networks = [
-    { id: "ethereum", name: "Ethereum Mainnet", chainId: 1, color: "bg-blue-500" },
-    { id: "goerli", name: "Goerli Testnet", chainId: 5, color: "bg-yellow-500" },
-    { id: "polygon", name: "Polygon", chainId: 137, color: "bg-purple-500" },
-    { id: "bsc", name: "BSC", chainId: 56, color: "bg-yellow-600" },
-    { id: "arbitrum", name: "Arbitrum", chainId: 42161, color: "bg-blue-600" },
+    { id: "ganache", name: "Ganache Local", chainId: 1337, color: "bg-orange-500", rpcUrl: "http://127.0.0.1:7545" },
+    { id: "hardhat", name: "Hardhat Local", chainId: 31337, color: "bg-yellow-500", rpcUrl: "http://127.0.0.1:8545" },
+    { id: "ethereum", name: "Ethereum Mainnet", chainId: 1, color: "bg-blue-500", rpcUrl: "https://mainnet.infura.io" },
+    { id: "goerli", name: "Goerli Testnet", chainId: 5, color: "bg-yellow-500", rpcUrl: "https://goerli.infura.io" },
+    { id: "polygon", name: "Polygon", chainId: 137, color: "bg-purple-500", rpcUrl: "https://polygon-rpc.com" },
   ];
 
   const handleFileUpload = (event) => {
@@ -34,7 +36,7 @@ const ContractDeployment = () => {
       const reader = new FileReader();
       reader.onload = (e) => {
         try {
-          const content = e.target.result;
+          const content = e.target?.result as string;
           // Assume it's a JSON file with bytecode
           const parsed = JSON.parse(content);
           setBytecode(parsed.bytecode || parsed.data || content);
@@ -43,6 +45,7 @@ const ContractDeployment = () => {
             description: `${file.name} 파일이 성공적으로 업로드되었습니다.`,
           });
         } catch (error) {
+          const content = e.target?.result as string;
           setBytecode(content);
           toast({
             title: "파일 업로드 완료",
@@ -55,10 +58,10 @@ const ContractDeployment = () => {
   };
 
   const handleDeploy = async () => {
-    if (!selectedNetwork || !bytecode) {
+    if (!selectedNetwork || !bytecode || !privateKey) {
       toast({
         title: "입력 오류",
-        description: "네트워크와 바이트코드를 모두 입력해주세요.",
+        description: "네트워크, 바이트코드, 개인키를 모두 입력해주세요.",
         variant: "destructive",
       });
       return;
@@ -66,28 +69,61 @@ const ContractDeployment = () => {
 
     setIsDeploying(true);
     
-    // Simulate deployment process
     try {
-      await new Promise(resolve => setTimeout(resolve, 3000));
-      
-      const mockResult = {
-        contractAddress: "0x742d35Cc6634C0532925a3b8D291803456789ABC",
-        transactionHash: "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
-        blockNumber: 18245893,
-        gasUsed: "2,134,567",
-        deploymentCost: "0.0234",
-        status: "success"
+      const selectedNet = networks.find(n => n.id === selectedNetwork);
+      if (!selectedNet) {
+        throw new Error("네트워크를 찾을 수 없습니다.");
+      }
+
+      // Connect to the network
+      const provider = new ethers.JsonRpcProvider(selectedNet.rpcUrl);
+      const wallet = new ethers.Wallet(privateKey, provider);
+
+      // Clean bytecode
+      const cleanBytecode = bytecode.startsWith('0x') ? bytecode : `0x${bytecode}`;
+
+      // Parse constructor arguments if provided
+      let constructorData = cleanBytecode;
+      if (constructorArgs.trim()) {
+        const args = constructorArgs.split(',').map(arg => arg.trim());
+        const abiCoder = new ethers.AbiCoder();
+        const encodedArgs = abiCoder.encode(['string[]'], [args]);
+        constructorData = cleanBytecode + encodedArgs.slice(2);
+      }
+
+      // Create deployment transaction
+      const tx = {
+        data: constructorData,
+        gasLimit: 3000000, // 3M gas limit
       };
-      
-      setDeploymentResult(mockResult);
-      toast({
-        title: "배포 성공! 🎉",
-        description: "스마트 컨트랙트가 성공적으로 배포되었습니다.",
-      });
-    } catch (error) {
+
+      // Send transaction
+      const deployTx = await wallet.sendTransaction(tx);
+      const receipt = await deployTx.wait();
+
+      if (receipt && receipt.status === 1) {
+        const result = {
+          contractAddress: receipt.contractAddress,
+          transactionHash: receipt.hash,
+          blockNumber: receipt.blockNumber,
+          gasUsed: receipt.gasUsed.toString(),
+          deploymentCost: ethers.formatEther(deployTx.gasPrice! * receipt.gasUsed),
+          status: "success"
+        };
+        
+        setDeploymentResult(result);
+        toast({
+          title: "배포 성공! 🎉",
+          description: "스마트 컨트랙트가 성공적으로 배포되었습니다.",
+        });
+      } else {
+        throw new Error("배포 트랜잭션이 실패했습니다.");
+      }
+    } catch (error: any) {
+      console.error("Deployment error:", error);
       toast({
         title: "배포 실패",
-        description: "배포 중 오류가 발생했습니다. 다시 시도해주세요.",
+        description: error.message || "배포 중 오류가 발생했습니다.",
         variant: "destructive",
       });
     } finally {
@@ -161,6 +197,19 @@ const ContractDeployment = () => {
                 value={bytecode}
                 onChange={(e) => setBytecode(e.target.value)}
                 className="web3-input min-h-[120px] font-mono text-sm"
+              />
+            </div>
+
+            {/* Private Key Input */}
+            <div className="space-y-2">
+              <Label htmlFor="private-key">개인키 (Private Key)</Label>
+              <Input
+                id="private-key"
+                type="password"
+                placeholder="0x로 시작하는 개인키를 입력하세요"
+                value={privateKey}
+                onChange={(e) => setPrivateKey(e.target.value)}
+                className="web3-input"
               />
             </div>
 
